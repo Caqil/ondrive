@@ -13,7 +13,10 @@ import (
 
 // CourierService interface for courier business logic
 type CourierService interface {
-	// Core Operations
+	GetRequest(requestID primitive.ObjectID) (*models.CourierRequest, error)
+	GetRequestsByFilter(filter map[string]interface{}, page, limit int) ([]*models.CourierRequest, int64, error)
+	UpdateRequest(requestID primitive.ObjectID, updateData map[string]interface{}) (*models.CourierRequest, error)
+
 	CreateRequest(request *models.CourierRequest) (*models.CourierRequest, error)
 	AcceptRequest(requestID, courierID primitive.ObjectID) error
 	CancelRequest(requestID, userID primitive.ObjectID, reason string) error
@@ -271,6 +274,64 @@ func (s *courierService) AcceptRequest(requestID, courierID primitive.ObjectID) 
 		Msg("Courier request accepted")
 
 	return nil
+}
+func (s *courierService) GetRequest(requestID primitive.ObjectID) (*models.CourierRequest, error) {
+	return s.courierRepo.GetByID(requestID)
+}
+
+func (s *courierService) GetRequestsByFilter(filter map[string]interface{}, page, limit int) ([]*models.CourierRequest, int64, error) {
+	return s.courierRepo.GetByFilter(filter, page, limit)
+}
+
+func (s *courierService) UpdateRequest(requestID primitive.ObjectID, updateData map[string]interface{}) (*models.CourierRequest, error) {
+	// Get the existing request first
+	existingRequest, err := s.courierRepo.GetByID(requestID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply the updates to the existing request
+	if priority, ok := updateData["priority"]; ok {
+		if priorityStr, ok := priority.(string); ok {
+			existingRequest.Priority = models.CourierPriority(priorityStr)
+		}
+	}
+
+	if scheduledPickupTime, ok := updateData["scheduled_pickup_time"]; ok {
+		if timePtr, ok := scheduledPickupTime.(*time.Time); ok && timePtr != nil {
+			existingRequest.ScheduledPickupTime = timePtr
+		}
+	}
+
+	if scheduledDeliveryTime, ok := updateData["scheduled_delivery_time"]; ok {
+		if timePtr, ok := scheduledDeliveryTime.(*time.Time); ok && timePtr != nil {
+			existingRequest.ScheduledDeliveryTime = timePtr
+		}
+	}
+
+	if flexibleTiming, ok := updateData["flexible_timing"]; ok {
+		if flexibleBool, ok := flexibleTiming.(bool); ok {
+			existingRequest.FlexibleTiming = flexibleBool
+		}
+	}
+
+	if timeWindow, ok := updateData["time_window"]; ok {
+		if timeWindowStruct, ok := timeWindow.(*models.TimeWindow); ok {
+			existingRequest.TimeWindow = timeWindowStruct
+		}
+	}
+
+	if specialInstructions, ok := updateData["special_instructions"]; ok {
+		if instructionsStr, ok := specialInstructions.(string); ok {
+			existingRequest.SpecialInstructions = instructionsStr
+		}
+	}
+
+	// Update the timestamp
+	existingRequest.UpdatedAt = time.Now()
+
+	// Save the updated request
+	return s.courierRepo.Update(requestID, existingRequest)
 }
 
 func (s *courierService) CancelRequest(requestID, userID primitive.ObjectID, reason string) error {

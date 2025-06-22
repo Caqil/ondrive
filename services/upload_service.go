@@ -82,6 +82,11 @@ const (
 	UploadTypeChatDocument   UploadType = "chat_document"
 )
 
+type UploadResult struct {
+	URL          string `json:"url"`
+	ThumbnailURL string `json:"thumbnail_url,omitempty"`
+}
+
 type FileInfo struct {
 	Name         string    `json:"name"`
 	Size         int64     `json:"size"`

@@ -1013,7 +1013,6 @@ func (cc *CourierController) GetSentPackages(c *gin.Context) {
 }
 
 func (cc *CourierController) GetReceivedPackages(c *gin.Context) {
-	userID, _ := c.Get("user_id")
 	phone := c.GetString("user_phone") // Assuming phone is available in context
 
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
