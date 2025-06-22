@@ -20,7 +20,7 @@ func SetupRoutes(r *gin.Engine, controllers *controllers.Controllers, wsHub *web
 
 	// Health check
 	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok", "service": "indrive-backend"})
+		c.JSON(200, gin.H{"status": "ok", "service": "ondrive"})
 	})
 
 	// API version 1

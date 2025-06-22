@@ -14,13 +14,6 @@ const (
 	RoleAdmin     UserRole = "admin"
 )
 
-type VerificationStatus string
-
-const (
-	StatusPending  VerificationStatus = "pending"
-	StatusApproved VerificationStatus = "approved"
-	StatusRejected VerificationStatus = "rejected"
-)
 
 type Gender string
 
