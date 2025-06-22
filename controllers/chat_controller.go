@@ -20,7 +20,7 @@ type ChatController struct {
 	chatService         services.ChatService
 	conversationRepo    repositories.ConversationRepository
 	messageRepo         repositories.MessageRepository
-	fileUploadService   services.FileUploadService
+	fileUploadService   services.UploadService
 	notificationService services.NotificationService
 	userRepo            repositories.UserRepository
 	wsHub               *websocket.Hub
@@ -76,7 +76,7 @@ func NewChatController(
 	conversationRepo repositories.ConversationRepository,
 	messageRepo repositories.MessageRepository,
 	userRepo repositories.UserRepository,
-	fileUploadService services.FileUploadService,
+	fileUploadService services.UploadService,
 	notificationService services.NotificationService,
 	wsHub *websocket.Hub,
 	logger utils.Logger,
@@ -519,7 +519,7 @@ func (cc *ChatController) SendImageMessage(c *gin.Context) {
 	}
 
 	// Upload image
-	uploadResult, err := cc.fileUploadService.UploadImage(file, "chat/images")
+	uploadResult, err := cc.fileUploadService.UploadChatImage(file, "chat/images")
 	if err != nil {
 		cc.logger.Error().Err(err).Msg("Failed to upload image")
 		utils.BadRequestResponse(c, "Failed to upload image")
@@ -528,7 +528,7 @@ func (cc *ChatController) SendImageMessage(c *gin.Context) {
 
 	// Create message
 	message := cc.createMediaMessage(conversationID, userID, models.MessageTypeImage, uploadResult.URL)
-	message.ThumbnailURL = uploadResult.ThumbnailURL
+	message.ThumbnailURL = uploadResult.
 
 	createdMessage, err := cc.messageRepo.Create(message)
 	if err != nil {
@@ -629,7 +629,7 @@ func (cc *ChatController) SendAudioMessage(c *gin.Context) {
 	duration, _ := strconv.Atoi(durationStr)
 
 	// Upload audio
-	uploadResult, err := cc.fileUploadService.UploadAudio(file, "chat/audio")
+	uploadResult, err := cc.fileUploadService.UploadChatAudio(file, "chat/audio")
 	if err != nil {
 		cc.logger.Error().Err(err).Msg("Failed to upload audio")
 		utils.BadRequestResponse(c, "Failed to upload audio")
@@ -1053,7 +1053,7 @@ func (cc *ChatController) sendReadReceipt(message *models.Message, userID string
 	}
 
 	wsMessage := websocket.WSMessage{
-		Type: models.EventChatMessageRead,
+		Type: "chat_message_read",
 		Data: websocket.MessageReadData{
 			ConversationID: message.ConversationID.Hex(),
 			MessageID:      message.ID.Hex(),

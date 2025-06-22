@@ -31,6 +31,10 @@ const (
 	GenderPreferNotToSay Gender = "prefer_not_to_say"
 )
 
+type UserStatsBulkUpdate struct {
+	UserID string    `json:"user_id" bson:"user_id"`
+	Stats  UserStats `json:"stats" bson:"stats"`
+}
 type User struct {
 	ID           primitive.ObjectID `json:"id" bson:"_id,omitempty"`
 	Phone        string             `json:"phone" bson:"phone" validate:"required,phone"`
@@ -45,8 +49,8 @@ type User struct {
 	Settings     UserSettings     `json:"settings" bson:"settings"`
 
 	// Driver-specific information (only for drivers)
-	DriverInfo *DriverInfo `json:"driver_info,omitempty" bson:"driver_info,omitempty"`
-
+	DriverInfo   *DriverInfo `json:"driver_info,omitempty" bson:"driver_info,omitempty"`
+	DistanceUnit string      `json:"distance_unit" bson:"distance_unit"` // km, miles
 	// Emergency Contacts
 	EmergencyContacts []EmergencyContact `json:"emergency_contacts" bson:"emergency_contacts"`
 
@@ -126,7 +130,7 @@ type UserSettings struct {
 	Theme            string `json:"theme" bson:"theme"`
 	AutoAcceptRides  bool   `json:"auto_accept_rides" bson:"auto_accept_rides"`
 	ShowOnlineStatus bool   `json:"show_online_status" bson:"show_online_status"`
-
+	DistanceUnit     string `json:"distance_unit" bson:"distance_unit"` // km, miles
 	// Privacy Settings
 	PrivacySettings PrivacySettings `json:"privacy_settings" bson:"privacy_settings"`
 
@@ -169,6 +173,7 @@ type Location struct {
 
 type EmergencyContact struct {
 	ID           primitive.ObjectID `json:"id" bson:"_id,omitempty"`
+	Email        string             `json:"email"`
 	Name         string             `json:"name" bson:"name" validate:"required"`
 	Phone        string             `json:"phone" bson:"phone" validate:"required,phone"`
 	Relationship string             `json:"relationship" bson:"relationship"`
@@ -211,4 +216,95 @@ type UserStats struct {
 	OnTimeRate          float64 `json:"on_time_rate" bson:"on_time_rate"`
 	FavoriteServiceType string  `json:"favorite_service_type" bson:"favorite_service_type"`
 	JoinedDaysAgo       int     `json:"joined_days_ago" bson:"joined_days_ago"`
+}
+
+type UpdateProfileRequest struct {
+	FirstName   *string    `json:"first_name,omitempty"`
+	LastName    *string    `json:"last_name,omitempty"`
+	DateOfBirth *time.Time `json:"date_of_birth,omitempty"`
+	Gender      *string    `json:"gender,omitempty"`
+	Bio         *string    `json:"bio,omitempty"`
+	Language    *string    `json:"language,omitempty"`
+	City        *string    `json:"city,omitempty"`
+	State       *string    `json:"state,omitempty"`
+	Country     *string    `json:"country,omitempty"`
+	PostalCode  *string    `json:"postal_code,omitempty"`
+}
+
+type DeleteProfileRequest struct {
+	Password string `json:"password" binding:"required"`
+	Reason   string `json:"reason"`
+}
+
+type UpdateLocationRequest struct {
+	Latitude   float64 `json:"latitude" binding:"required"`
+	Longitude  float64 `json:"longitude" binding:"required"`
+	Address    string  `json:"address"`
+	City       string  `json:"city"`
+	State      string  `json:"state"`
+	Country    string  `json:"country"`
+	PostalCode string  `json:"postal_code"`
+}
+
+type UpdateSettingsRequest struct {
+	Language     *string `json:"language,omitempty"`
+	Currency     *string `json:"currency,omitempty"`
+	Theme        *string `json:"theme,omitempty"`
+	DistanceUnit *string `json:"distance_unit,omitempty"`
+}
+
+type UpdatePrivacySettingsRequest struct {
+	ShowLastSeen         *bool `json:"show_last_seen,omitempty"`
+	ShowOnlineStatus     *bool `json:"show_online_status,omitempty"`
+	ShowPhoneNumber      *bool `json:"show_phone_number,omitempty"`
+	AllowLocationSharing *bool `json:"allow_location_sharing,omitempty"`
+}
+
+type UpdateNotificationSettingsRequest struct {
+	NotificationsEnabled     *bool `json:"notifications_enabled,omitempty"`
+	PushNotifications        *bool `json:"push_notifications,omitempty"`
+	EmailNotifications       *bool `json:"email_notifications,omitempty"`
+	SMSNotifications         *bool `json:"sms_notifications,omitempty"`
+	RideNotifications        *bool `json:"ride_notifications,omitempty"`
+	PromotionalNotifications *bool `json:"promotional_notifications,omitempty"`
+}
+
+type AddEmergencyContactRequest struct {
+	Name         string `json:"name" binding:"required"`
+	Phone        string `json:"phone" binding:"required"`
+	Relationship string `json:"relationship" binding:"required"`
+	Email        string `json:"email"`
+}
+
+type UpdateEmergencyContactRequest struct {
+	Name         *string `json:"name,omitempty"`
+	Phone        *string `json:"phone,omitempty"`
+	Relationship *string `json:"relationship,omitempty"`
+	Email        *string `json:"email,omitempty"`
+}
+
+type AddFavoritePlaceRequest struct {
+	Name       string  `json:"name" binding:"required"`
+	Type       string  `json:"type" binding:"required"`
+	Icon       string  `json:"icon"`
+	Latitude   float64 `json:"latitude" binding:"required"`
+	Longitude  float64 `json:"longitude" binding:"required"`
+	Address    string  `json:"address"`
+	City       string  `json:"city"`
+	State      string  `json:"state"`
+	Country    string  `json:"country"`
+	PostalCode string  `json:"postal_code"`
+}
+
+type UpdateFavoritePlaceRequest struct {
+	Name       *string  `json:"name,omitempty"`
+	Type       *string  `json:"type,omitempty"`
+	Icon       *string  `json:"icon,omitempty"`
+	Latitude   *float64 `json:"latitude,omitempty"`
+	Longitude  *float64 `json:"longitude,omitempty"`
+	Address    *string  `json:"address,omitempty"`
+	City       *string  `json:"city,omitempty"`
+	State      *string  `json:"state,omitempty"`
+	Country    *string  `json:"country,omitempty"`
+	PostalCode *string  `json:"postal_code,omitempty"`
 }

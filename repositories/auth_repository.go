@@ -17,6 +17,7 @@ import (
 
 // UserRepository interface for user data operations
 type UserRepository interface {
+	// Basic CRUD operations
 	Create(user *models.User) error
 	GetByID(userID string) (*models.User, error)
 	GetByPhone(phone string) (*models.User, error)
@@ -24,16 +25,42 @@ type UserRepository interface {
 	Update(user *models.User) error
 	Delete(userID string) error
 	List(filter UserFilter) ([]*models.User, int64, error)
+
+	// Profile and settings management
 	UpdateLastLogin(userID string) error
 	UpdateProfile(userID string, profile *models.UserProfile) error
 	UpdateSettings(userID string, settings *models.UserSettings) error
 	UpdateVerificationStatus(userID string, verification *models.UserVerification) error
+
+	// Location management
+	UpdateLocation(userID string, location *models.Location) error
+
+	// Document management
+	AddVerificationDocument(userID string, doc *models.VerificationDoc) error
+	RemoveVerificationDocument(userID, documentID string) error
+
+	// Emergency contacts management
 	AddEmergencyContact(userID string, contact *models.EmergencyContact) error
 	RemoveEmergencyContact(userID, contactID string) error
+	UpdateEmergencyContacts(userID string, contacts []models.EmergencyContact) error
+
+	// Favorite places management
 	AddFavoritePlace(userID string, place *models.FavoritePlace) error
 	RemoveFavoritePlace(userID, placeID string) error
+	UpdateFavoritePlaces(userID string, places []models.FavoritePlace) error
+
+	// Statistics and analytics
 	GetUserStats(userID string) (*models.UserStats, error)
 	UpdateUserStats(userID string, stats *models.UserStats) error
+
+	// User management
+	SoftDelete(userID, reason string) error
+
+	// Advanced queries (optional)
+	GetUsersByLocation(lat, lng, radiusKm float64, userType models.UserRole, limit int) ([]*models.User, error)
+	GetActiveDriversInArea(lat, lng, radiusKm float64) ([]*models.User, error)
+	UpdateDriverOnlineStatus(userID string, isOnline bool) error
+	BulkUpdateUserStats(updates []models.UserStatsBulkUpdate) error
 }
 
 // TokenRepository interface for auth token operations
@@ -95,6 +122,8 @@ func NewTokenRepository(db *mongo.Database, logger utils.Logger) TokenRepository
 }
 
 // UserRepository Implementation
+
+// Basic CRUD operations
 
 func (r *userRepository) Create(user *models.User) error {
 	collection := r.db.Collection("users")
@@ -262,13 +291,15 @@ func (r *userRepository) List(filter UserFilter) ([]*models.User, int64, error) 
 		}
 	}
 	if filter.City != "" {
-		mongoFilter["profile.city"] = filter.City
+		mongoFilter["profile.city"] = bson.M{"$regex": filter.City, "$options": "i"}
 	}
 	if filter.Country != "" {
-		mongoFilter["profile.country"] = filter.Country
+		mongoFilter["profile.country"] = bson.M{"$regex": filter.Country, "$options": "i"}
 	}
 	if filter.Search != "" {
 		mongoFilter["$or"] = []bson.M{
+			{"profile.first_name": bson.M{"$regex": filter.Search, "$options": "i"}},
+			{"profile.last_name": bson.M{"$regex": filter.Search, "$options": "i"}},
 			{"profile.full_name": bson.M{"$regex": filter.Search, "$options": "i"}},
 			{"phone": bson.M{"$regex": filter.Search, "$options": "i"}},
 			{"email": bson.M{"$regex": filter.Search, "$options": "i"}},
@@ -283,57 +314,48 @@ func (r *userRepository) List(filter UserFilter) ([]*models.User, int64, error) 
 	}
 
 	// Build options
-	findOptions := options.Find()
+	opts := options.Find()
+
+	// Sorting
+	sortBy := "created_at"
+	sortOrder := -1
+	if filter.SortBy != "" {
+		sortBy = filter.SortBy
+	}
+	if filter.SortOrder != 0 {
+		sortOrder = filter.SortOrder
+	}
+	opts.SetSort(bson.D{{Key: sortBy, Value: sortOrder}})
 
 	// Pagination
 	if filter.Page > 0 && filter.Limit > 0 {
 		skip := (filter.Page - 1) * filter.Limit
-		findOptions.SetSkip(int64(skip))
-		findOptions.SetLimit(int64(filter.Limit))
-	} else if filter.Limit > 0 {
-		findOptions.SetLimit(int64(filter.Limit))
+		opts.SetSkip(int64(skip))
+		opts.SetLimit(int64(filter.Limit))
 	}
 
-	// Sorting
-	if filter.SortBy != "" {
-		sortOrder := 1
-		if filter.SortOrder == -1 {
-			sortOrder = -1
-		}
-		findOptions.SetSort(bson.M{filter.SortBy: sortOrder})
-	} else {
-		findOptions.SetSort(bson.M{"created_at": -1}) // Default sort by creation date desc
-	}
-
-	// Find users
-	cursor, err := collection.Find(ctx, mongoFilter, findOptions)
+	// Execute query
+	cursor, err := collection.Find(ctx, mongoFilter, opts)
 	if err != nil {
-		r.logger.Error().Err(err).Msg("Failed to find users")
-		return nil, 0, fmt.Errorf("failed to find users: %w", err)
+		r.logger.Error().Err(err).Msg("Failed to list users")
+		return nil, 0, fmt.Errorf("failed to list users: %w", err)
 	}
 	defer cursor.Close(ctx)
 
 	var users []*models.User
-	for cursor.Next(ctx) {
-		var user models.User
-		if err := cursor.Decode(&user); err != nil {
-			r.logger.Error().Err(err).Msg("Failed to decode user")
-			continue
-		}
-		users = append(users, &user)
-	}
-
-	if err := cursor.Err(); err != nil {
-		r.logger.Error().Err(err).Msg("Cursor error while listing users")
-		return nil, 0, fmt.Errorf("cursor error: %w", err)
+	if err = cursor.All(ctx, &users); err != nil {
+		r.logger.Error().Err(err).Msg("Failed to decode users")
+		return nil, 0, fmt.Errorf("failed to decode users: %w", err)
 	}
 
 	return users, total, nil
 }
 
+// Profile and settings management
+
 func (r *userRepository) UpdateLastLogin(userID string) error {
 	collection := r.db.Collection("users")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	objectID, err := primitive.ObjectIDFromHex(userID)
@@ -347,7 +369,7 @@ func (r *userRepository) UpdateLastLogin(userID string) error {
 		bson.M{"_id": objectID},
 		bson.M{
 			"$set": bson.M{
-				"last_login_at": now,
+				"last_login_at": &now,
 				"updated_at":    now,
 			},
 		},
@@ -444,6 +466,111 @@ func (r *userRepository) UpdateVerificationStatus(userID string, verification *m
 	return nil
 }
 
+// Location management
+
+func (r *userRepository) UpdateLocation(userID string, location *models.Location) error {
+	collection := r.db.Collection("users")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	objectID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return fmt.Errorf("invalid user ID format")
+	}
+
+	_, err = collection.UpdateOne(
+		ctx,
+		bson.M{"_id": objectID},
+		bson.M{
+			"$set": bson.M{
+				"location":   location,
+				"updated_at": time.Now(),
+			},
+		},
+	)
+	if err != nil {
+		r.logger.Error().Err(err).Str("user_id", userID).Msg("Failed to update user location")
+		return fmt.Errorf("failed to update user location: %w", err)
+	}
+
+	r.logger.Info().Str("user_id", userID).Msg("User location updated successfully")
+	return nil
+}
+
+// Document management
+
+func (r *userRepository) AddVerificationDocument(userID string, doc *models.VerificationDoc) error {
+	collection := r.db.Collection("users")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	objectID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return fmt.Errorf("invalid user ID format")
+	}
+
+	doc.ID = primitive.NewObjectID()
+	doc.UploadedAt = time.Now()
+
+	_, err = collection.UpdateOne(
+		ctx,
+		bson.M{"_id": objectID},
+		bson.M{
+			"$push": bson.M{
+				"verification.documents": doc,
+			},
+			"$set": bson.M{
+				"updated_at": time.Now(),
+			},
+		},
+	)
+	if err != nil {
+		r.logger.Error().Err(err).Str("user_id", userID).Msg("Failed to add verification document")
+		return fmt.Errorf("failed to add verification document: %w", err)
+	}
+
+	r.logger.Info().Str("user_id", userID).Str("document_type", doc.Type).Msg("Verification document added successfully")
+	return nil
+}
+
+func (r *userRepository) RemoveVerificationDocument(userID, documentID string) error {
+	collection := r.db.Collection("users")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	userObjectID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return fmt.Errorf("invalid user ID format")
+	}
+
+	documentObjectID, err := primitive.ObjectIDFromHex(documentID)
+	if err != nil {
+		return fmt.Errorf("invalid document ID format")
+	}
+
+	_, err = collection.UpdateOne(
+		ctx,
+		bson.M{"_id": userObjectID},
+		bson.M{
+			"$pull": bson.M{
+				"verification.documents": bson.M{"_id": documentObjectID},
+			},
+			"$set": bson.M{
+				"updated_at": time.Now(),
+			},
+		},
+	)
+	if err != nil {
+		r.logger.Error().Err(err).Str("user_id", userID).Str("document_id", documentID).Msg("Failed to remove verification document")
+		return fmt.Errorf("failed to remove verification document: %w", err)
+	}
+
+	r.logger.Info().Str("user_id", userID).Str("document_id", documentID).Msg("Verification document removed successfully")
+	return nil
+}
+
+// Emergency contacts management
+
 func (r *userRepository) AddEmergencyContact(userID string, contact *models.EmergencyContact) error {
 	collection := r.db.Collection("users")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -511,6 +638,37 @@ func (r *userRepository) RemoveEmergencyContact(userID, contactID string) error 
 
 	return nil
 }
+
+func (r *userRepository) UpdateEmergencyContacts(userID string, contacts []models.EmergencyContact) error {
+	collection := r.db.Collection("users")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	objectID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return fmt.Errorf("invalid user ID format")
+	}
+
+	_, err = collection.UpdateOne(
+		ctx,
+		bson.M{"_id": objectID},
+		bson.M{
+			"$set": bson.M{
+				"emergency_contacts": contacts,
+				"updated_at":         time.Now(),
+			},
+		},
+	)
+	if err != nil {
+		r.logger.Error().Err(err).Str("user_id", userID).Msg("Failed to update emergency contacts")
+		return fmt.Errorf("failed to update emergency contacts: %w", err)
+	}
+
+	r.logger.Info().Str("user_id", userID).Msg("Emergency contacts updated successfully")
+	return nil
+}
+
+// Favorite places management
 
 func (r *userRepository) AddFavoritePlace(userID string, place *models.FavoritePlace) error {
 	collection := r.db.Collection("users")
@@ -581,6 +739,37 @@ func (r *userRepository) RemoveFavoritePlace(userID, placeID string) error {
 	return nil
 }
 
+func (r *userRepository) UpdateFavoritePlaces(userID string, places []models.FavoritePlace) error {
+	collection := r.db.Collection("users")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	objectID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return fmt.Errorf("invalid user ID format")
+	}
+
+	_, err = collection.UpdateOne(
+		ctx,
+		bson.M{"_id": objectID},
+		bson.M{
+			"$set": bson.M{
+				"favorite_places": places,
+				"updated_at":      time.Now(),
+			},
+		},
+	)
+	if err != nil {
+		r.logger.Error().Err(err).Str("user_id", userID).Msg("Failed to update favorite places")
+		return fmt.Errorf("failed to update favorite places: %w", err)
+	}
+
+	r.logger.Info().Str("user_id", userID).Msg("Favorite places updated successfully")
+	return nil
+}
+
+// Statistics and analytics
+
 func (r *userRepository) GetUserStats(userID string) (*models.UserStats, error) {
 	collection := r.db.Collection("users")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -636,6 +825,208 @@ func (r *userRepository) UpdateUserStats(userID string, stats *models.UserStats)
 		return fmt.Errorf("failed to update user stats: %w", err)
 	}
 
+	return nil
+}
+
+// User management
+
+func (r *userRepository) SoftDelete(userID, reason string) error {
+	collection := r.db.Collection("users")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	objectID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return fmt.Errorf("invalid user ID format")
+	}
+
+	now := time.Now()
+	_, err = collection.UpdateOne(
+		ctx,
+		bson.M{"_id": objectID},
+		bson.M{
+			"$set": bson.M{
+				"is_deleted":      true,
+				"is_active":       false,
+				"deleted_at":      &now,
+				"deletion_reason": reason,
+				"updated_at":      now,
+			},
+		},
+	)
+	if err != nil {
+		r.logger.Error().Err(err).Str("user_id", userID).Msg("Failed to soft delete user")
+		return fmt.Errorf("failed to soft delete user: %w", err)
+	}
+
+	r.logger.Info().Str("user_id", userID).Str("reason", reason).Msg("User soft deleted successfully")
+	return nil
+}
+
+// Advanced queries
+
+func (r *userRepository) GetUsersByLocation(lat, lng, radiusKm float64, userType models.UserRole, limit int) ([]*models.User, error) {
+	collection := r.db.Collection("users")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Build query with geospatial search
+	query := bson.M{
+		"location": bson.M{
+			"$near": bson.M{
+				"$geometry": bson.M{
+					"type":        "Point",
+					"coordinates": []float64{lng, lat},
+				},
+				"$maxDistance": radiusKm * 1000, // Convert km to meters
+			},
+		},
+		"is_active":  true,
+		"is_deleted": false,
+		"role":       userType,
+	}
+
+	opts := options.Find().SetLimit(int64(limit))
+
+	cursor, err := collection.Find(ctx, query, opts)
+	if err != nil {
+		r.logger.Error().Err(err).Float64("lat", lat).Float64("lng", lng).Msg("Failed to find users by location")
+		return nil, fmt.Errorf("failed to find users by location: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	var users []*models.User
+	if err = cursor.All(ctx, &users); err != nil {
+		r.logger.Error().Err(err).Msg("Failed to decode users by location")
+		return nil, fmt.Errorf("failed to decode users: %w", err)
+	}
+
+	return users, nil
+}
+
+func (r *userRepository) GetActiveDriversInArea(lat, lng, radiusKm float64) ([]*models.User, error) {
+	collection := r.db.Collection("users")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Query for active drivers with recent location updates
+	query := bson.M{
+		"role":                  models.RoleDriver,
+		"is_active":             true,
+		"is_deleted":            false,
+		"driver_info.is_online": true,
+		"location": bson.M{
+			"$near": bson.M{
+				"$geometry": bson.M{
+					"type":        "Point",
+					"coordinates": []float64{lng, lat},
+				},
+				"$maxDistance": radiusKm * 1000,
+			},
+		},
+		"location.updated_at": bson.M{
+			"$gte": time.Now().Add(-5 * time.Minute), // Location updated within last 5 minutes
+		},
+	}
+
+	cursor, err := collection.Find(ctx, query)
+	if err != nil {
+		r.logger.Error().Err(err).Float64("lat", lat).Float64("lng", lng).Msg("Failed to find active drivers")
+		return nil, fmt.Errorf("failed to find active drivers: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	var drivers []*models.User
+	if err = cursor.All(ctx, &drivers); err != nil {
+		r.logger.Error().Err(err).Msg("Failed to decode active drivers")
+		return nil, fmt.Errorf("failed to decode drivers: %w", err)
+	}
+
+	return drivers, nil
+}
+
+func (r *userRepository) UpdateDriverOnlineStatus(userID string, isOnline bool) error {
+	collection := r.db.Collection("users")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	objectID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return fmt.Errorf("invalid user ID format")
+	}
+
+	update := bson.M{
+		"$set": bson.M{
+			"driver_info.is_online": isOnline,
+			"updated_at":            time.Now(),
+		},
+	}
+
+	if isOnline {
+		update["$set"].(bson.M)["driver_info.last_online_at"] = time.Now()
+	} else {
+		update["$set"].(bson.M)["driver_info.last_offline_at"] = time.Now()
+	}
+
+	_, err = collection.UpdateOne(
+		ctx,
+		bson.M{
+			"_id":  objectID,
+			"role": models.RoleDriver,
+		},
+		update,
+	)
+	if err != nil {
+		r.logger.Error().Err(err).Str("user_id", userID).Bool("is_online", isOnline).Msg("Failed to update driver online status")
+		return fmt.Errorf("failed to update driver online status: %w", err)
+	}
+
+	r.logger.Info().Str("user_id", userID).Bool("is_online", isOnline).Msg("Driver online status updated")
+	return nil
+}
+
+func (r *userRepository) BulkUpdateUserStats(updates []models.UserStatsBulkUpdate) error {
+	if len(updates) == 0 {
+		return nil
+	}
+
+	collection := r.db.Collection("users")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Build bulk write operations
+	var operations []mongo.WriteModel
+	for _, update := range updates {
+		objectID, err := primitive.ObjectIDFromHex(update.UserID)
+		if err != nil {
+			r.logger.Warn().Err(err).Str("user_id", update.UserID).Msg("Invalid user ID in bulk update")
+			continue
+		}
+
+		updateModel := mongo.NewUpdateOneModel().
+			SetFilter(bson.M{"_id": objectID}).
+			SetUpdate(bson.M{
+				"$set": bson.M{
+					"stats":      update.Stats,
+					"updated_at": time.Now(),
+				},
+			})
+
+		operations = append(operations, updateModel)
+	}
+
+	if len(operations) == 0 {
+		return fmt.Errorf("no valid operations to perform")
+	}
+
+	// Execute bulk write
+	_, err := collection.BulkWrite(ctx, operations, options.BulkWrite().SetOrdered(false))
+	if err != nil {
+		r.logger.Error().Err(err).Int("operations_count", len(operations)).Msg("Failed to bulk update user stats")
+		return fmt.Errorf("failed to bulk update user stats: %w", err)
+	}
+
+	r.logger.Info().Int("updated_count", len(operations)).Msg("User stats bulk updated successfully")
 	return nil
 }
 
@@ -774,7 +1165,7 @@ func (r *tokenRepository) BlacklistToken(token string) error {
 
 	_, err := collection.InsertOne(ctx, blacklistEntry)
 	if err != nil {
-		r.logger.Error().Err(err).Str("token", utils.MaskSensitiveData(token, '*', 4)).Msg("Failed to blacklist token")
+		r.logger.Error().Err(err).Msg("Failed to blacklist token")
 		return fmt.Errorf("failed to blacklist token: %w", err)
 	}
 
@@ -793,13 +1184,9 @@ func (r *tokenRepository) IsTokenBlacklisted(token string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	count, err := collection.CountDocuments(ctx, bson.M{"token": token})
-	if err != nil {
-		r.logger.Error().Err(err).Str("token", utils.MaskSensitiveData(token, '*', 4)).Msg("Failed to check if token is blacklisted")
-		return false
-	}
-
-	return count > 0
+	var result bson.M
+	err := collection.FindOne(ctx, bson.M{"token": token}).Decode(&result)
+	return err == nil
 }
 
 func (r *tokenRepository) CleanupExpiredTokens() error {
@@ -808,32 +1195,27 @@ func (r *tokenRepository) CleanupExpiredTokens() error {
 
 	now := time.Now()
 
-	// Cleanup expired password reset tokens
-	passwordResetCollection := r.db.Collection("password_reset_tokens")
-	result1, err := passwordResetCollection.DeleteMany(ctx, bson.M{"expires_at": bson.M{"$lt": now}})
+	// Cleanup password reset tokens
+	passwordCollection := r.db.Collection("password_reset_tokens")
+	_, err := passwordCollection.DeleteMany(ctx, bson.M{"expires_at": bson.M{"$lt": now}})
 	if err != nil {
 		r.logger.Error().Err(err).Msg("Failed to cleanup expired password reset tokens")
-	} else if result1.DeletedCount > 0 {
-		r.logger.Info().Int64("count", result1.DeletedCount).Msg("Cleaned up expired password reset tokens")
 	}
 
-	// Cleanup expired email verification tokens
-	emailVerificationCollection := r.db.Collection("email_verification_tokens")
-	result2, err := emailVerificationCollection.DeleteMany(ctx, bson.M{"expires_at": bson.M{"$lt": now}})
+	// Cleanup email verification tokens
+	emailCollection := r.db.Collection("email_verification_tokens")
+	_, err = emailCollection.DeleteMany(ctx, bson.M{"expires_at": bson.M{"$lt": now}})
 	if err != nil {
 		r.logger.Error().Err(err).Msg("Failed to cleanup expired email verification tokens")
-	} else if result2.DeletedCount > 0 {
-		r.logger.Info().Int64("count", result2.DeletedCount).Msg("Cleaned up expired email verification tokens")
 	}
 
-	// Cleanup expired blacklisted tokens
-	blacklistedTokensCollection := r.db.Collection("blacklisted_tokens")
-	result3, err := blacklistedTokensCollection.DeleteMany(ctx, bson.M{"expires_at": bson.M{"$lt": now}})
+	// Cleanup blacklisted tokens
+	blacklistCollection := r.db.Collection("blacklisted_tokens")
+	_, err = blacklistCollection.DeleteMany(ctx, bson.M{"expires_at": bson.M{"$lt": now}})
 	if err != nil {
 		r.logger.Error().Err(err).Msg("Failed to cleanup expired blacklisted tokens")
-	} else if result3.DeletedCount > 0 {
-		r.logger.Info().Int64("count", result3.DeletedCount).Msg("Cleaned up expired blacklisted tokens")
 	}
 
+	r.logger.Info().Msg("Token cleanup completed")
 	return nil
 }
