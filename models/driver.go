@@ -263,11 +263,13 @@ type DriverPreferences struct {
 	PromoNotifications       bool `json:"promo_notifications" bson:"promo_notifications"`
 
 	// Route Preferences
-	AvoidTolls         bool `json:"avoid_tolls" bson:"avoid_tolls"`
-	AvoidHighways      bool `json:"avoid_highways" bson:"avoid_highways"`
-	PreferFastestRoute bool `json:"prefer_fastest_route" bson:"prefer_fastest_route"`
-
-	UpdatedAt time.Time `json:"updated_at" bson:"updated_at"`
+	AvoidTolls         bool      `json:"avoid_tolls" bson:"avoid_tolls"`
+	AvoidHighways      bool      `json:"avoid_highways" bson:"avoid_highways"`
+	PreferFastestRoute bool      `json:"prefer_fastest_route" bson:"prefer_fastest_route"`
+	WaitingTime        int       `json:"waiting_time"`
+	FlexiblePickup     bool      `json:"flexible_pickup"`
+	FlexibleDropoff    bool      `json:"flexible_dropoff"`
+	UpdatedAt          time.Time `json:"updated_at" bson:"updated_at"`
 }
 
 type ServiceArea struct {

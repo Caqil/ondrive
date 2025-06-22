@@ -270,7 +270,7 @@ func (s *authService) Login(identifier, password string) (*models.User, *utils.T
 	var user *models.User
 	var err error
 
-	if utils.IsValidEmail(identifier) {
+	if IsValidEmail(identifier) {
 		user, err = s.userRepo.GetByEmail(identifier)
 	} else {
 		normalizedPhone := utils.NormalizePhoneNumber(identifier)
@@ -399,7 +399,7 @@ func (s *authService) RequestPasswordReset(identifier string) (*PasswordResetTok
 	var user *models.User
 	var err error
 
-	if utils.IsValidEmail(identifier) {
+	if IsValidEmail(identifier) {
 		user, err = s.userRepo.GetByEmail(identifier)
 	} else {
 		normalizedPhone := utils.NormalizePhoneNumber(identifier)
@@ -668,7 +668,7 @@ func (s *authService) validateRegisterRequest(req *RegisterUserRequest) error {
 		return fmt.Errorf("role must be either 'passenger' or 'driver'")
 	}
 
-	if req.Email != "" && !utils.IsValidEmail(req.Email) {
+	if req.Email != "" && !IsValidEmail(req.Email) {
 		return fmt.Errorf("invalid email format")
 	}
 

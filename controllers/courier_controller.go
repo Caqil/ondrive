@@ -851,7 +851,7 @@ func (cc *CourierController) RequireSignature(c *gin.Context) {
 // Courier Pricing
 
 func (cc *CourierController) EstimateCourierPrice(c *gin.Context) {
-	var req EstimatePriceRequest
+	var req services.EstimatePriceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.ValidationErrorResponse(c, map[string]string{"error": "Invalid price estimation data"})
 		return

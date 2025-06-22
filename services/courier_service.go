@@ -538,7 +538,7 @@ func (s *courierService) GetTrackingInfo(requestID primitive.ObjectID) (*Trackin
 				ID:     courier.ID,
 				Name:   courier.Profile.FullName,
 				Phone:  courier.Phone,
-				Rating: courier.Rating,
+				Rating: courier.DriverInfo.Rating.TotalRating,
 				Photo:  courier.Profile.AvatarURL,
 			}
 		}
