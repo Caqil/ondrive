@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"indrive-backend/models"
-	"indrive-backend/utils"
+	"ondrive/models"
+	"ondrive/utils"
 
 	"github.com/gorilla/websocket"
 )

@@ -1,9 +1,9 @@
 package routes
 
 import (
-	"indrive-backend/controllers"
-	"indrive-backend/middleware"
-	"indrive-backend/websocket"
+	"ondrive/controllers"
+	"ondrive/middleware"
+	"ondrive/websocket"
 
 	"github.com/gin-gonic/gin"
 )

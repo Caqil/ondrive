@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"indrive-backend/models"
-	"indrive-backend/repositories"
-	"indrive-backend/services"
-	"indrive-backend/utils"
+	"ondrive/models"
+	"ondrive/repositories"
+	"ondrive/services"
+	"ondrive/utils"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson/primitive"

@@ -1,7 +1,7 @@
 package routes
 
 import (
-	"indrive-backend/controllers"
+	"ondrive/controllers"
 	"ondrive/middleware"
 	"ondrive/websocket"
 
@@ -13,7 +13,7 @@ func SetupRoutes(r *gin.Engine, controllers *controllers.Controllers, wsHub *web
 	r.Use(middleware.CORS())
 
 	// Logger middleware
-	r.Use(middleware.Logger())
+	r.Use(middleware.Logger(utils.NewLogger()))
 
 	// Rate limiting middleware
 	r.Use(middleware.RateLimit())

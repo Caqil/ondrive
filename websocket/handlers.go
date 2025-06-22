@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"indrive-backend/models"
-	"indrive-backend/utils"
+	"ondrive/models"
+	"ondrive/utils"
 )
 
 // Event handlers for different message types

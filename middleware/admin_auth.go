@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"time"
 
-	"indrive-backend/models"
-	"indrive-backend/repositories"
-	"indrive-backend/utils"
+	"ondrive/models"
+	"ondrive/repositories"
+	"ondrive/utils"
 
 	"github.com/gin-gonic/gin"
 )

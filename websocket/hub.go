@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"indrive-backend/utils"
 	"ondrive/models"
+	"ondrive/utils"
 )
 
 // ConnectionType defines the type of WebSocket connection

@@ -3,8 +3,8 @@ package websocket
 import (
 	"time"
 
-	"indrive-backend/models"
-	"indrive-backend/utils"
+	"ondrive/models"
+	"ondrive/utils"
 )
 
 // WSMessage represents a WebSocket message

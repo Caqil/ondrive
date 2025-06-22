@@ -1,7 +1,7 @@
 package routes
 
 import (
-	"indrive-backend/controllers"
+	"ondrive/controllers"
 
 	"github.com/gin-gonic/gin"
 )

@@ -1,8 +1,8 @@
 package admin
 
 import (
-	"indrive-backend/admin/admin_controllers"
-	"indrive-backend/middleware"
+	"ondrive/admin/admin_controllers"
+	"ondrive/middleware"
 
 	"github.com/gin-gonic/gin"
 )

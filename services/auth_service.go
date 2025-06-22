@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"indrive-backend/models"
-	"indrive-backend/repositories"
-	"indrive-backend/utils"
+	"ondrive/models"
+	"ondrive/repositories"
+	"ondrive/utils"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
