@@ -188,6 +188,156 @@ type PromotionalRate struct {
 	IsActive        bool               `json:"is_active" bson:"is_active"`
 }
 
+// FareEstimate represents a fare estimate for a potential ride
+type FareEstimate struct {
+	ID          primitive.ObjectID `json:"id" bson:"_id,omitempty"`
+	ServiceType ServiceType        `json:"service_type" bson:"service_type"`
+	VehicleType VehicleType        `json:"vehicle_type" bson:"vehicle_type"`
+
+	// Route Information
+	Distance float64 `json:"distance" bson:"distance"` // in kilometers
+	Duration int     `json:"duration" bson:"duration"` // in minutes
+
+	// Fare Breakdown
+	BaseFare     float64 `json:"base_fare" bson:"base_fare"`
+	DistanceFare float64 `json:"distance_fare" bson:"distance_fare"`
+	TimeFare     float64 `json:"time_fare" bson:"time_fare"`
+	SurgeFare    float64 `json:"surge_fare" bson:"surge_fare"`
+	ServiceFee   float64 `json:"service_fee" bson:"service_fee"`
+	TollsFee     float64 `json:"tolls_fee" bson:"tolls_fee"`
+
+	// Discounts & Promotions
+	DiscountAmount float64 `json:"discount_amount" bson:"discount_amount"`
+	PromoCode      string  `json:"promo_code" bson:"promo_code"`
+
+	// Totals
+	Subtotal float64 `json:"subtotal" bson:"subtotal"`
+	Total    float64 `json:"total" bson:"total"`
+	Currency string  `json:"currency" bson:"currency"`
+
+	// Validity
+	EstimatedAt time.Time `json:"estimated_at" bson:"estimated_at"`
+	ValidUntil  time.Time `json:"valid_until" bson:"valid_until"`
+
+	// Additional Information
+	Notes    []string `json:"notes,omitempty" bson:"notes,omitempty"`
+	Warnings []string `json:"warnings,omitempty" bson:"warnings,omitempty"`
+
+	// Price Range & Confidence
+	PriceRange FarePriceRange `json:"price_range" bson:"price_range"`
+	Confidence float64        `json:"confidence" bson:"confidence"`
+}
+
+// Additional response types
+type FareComparison struct {
+	ServiceOptions []ServiceOption `json:"service_options"`
+	Recommended    string          `json:"recommended"`
+	PriceRange     struct {
+		Min float64 `json:"min"`
+		Max float64 `json:"max"`
+	} `json:"price_range"`
+}
+
+type ServiceOption struct {
+	ServiceType   ServiceType `json:"service_type"`
+	VehicleType   VehicleType `json:"vehicle_type"`
+	EstimatedFare float64     `json:"estimated_fare"`
+	Duration      int         `json:"duration"`
+	Availability  string      `json:"availability"`
+}
+
+type SuggestedFare struct {
+	Amount     float64  `json:"amount"`
+	Confidence float64  `json:"confidence"`
+	Factors    []string `json:"factors"`
+	PriceRange struct {
+		Min float64 `json:"min"`
+		Max float64 `json:"max"`
+	} `json:"price_range"`
+	Description string `json:"description"`
+}
+
+type FareRule struct {
+	ID          primitive.ObjectID     `json:"id"`
+	Name        string                 `json:"name"`
+	Description string                 `json:"description"`
+	RuleType    string                 `json:"rule_type"`
+	Conditions  map[string]interface{} `json:"conditions"`
+	Actions     map[string]interface{} `json:"actions"`
+	IsActive    bool                   `json:"is_active"`
+}
+
+type FareStatistics struct {
+	TotalRides    int64     `json:"total_rides"`
+	TotalSpent    float64   `json:"total_spent"`
+	AverageFare   float64   `json:"average_fare"`
+	HighestFare   float64   `json:"highest_fare"`
+	LowestFare    float64   `json:"lowest_fare"`
+	TotalSavings  float64   `json:"total_savings"`
+	DiscountUsage int64     `json:"discount_usage"`
+	PeriodStart   time.Time `json:"period_start"`
+	PeriodEnd     time.Time `json:"period_end"`
+}
+
+type FareTrend struct {
+	Date        time.Time `json:"date"`
+	AverageFare float64   `json:"average_fare"`
+	RideCount   int64     `json:"ride_count"`
+	DemandLevel string    `json:"demand_level"`
+}
+
+type DiscountCode struct {
+	Code         string    `json:"code"`
+	Description  string    `json:"description"`
+	DiscountType string    `json:"discount_type"`
+	Value        float64   `json:"value"`
+	MaxDiscount  float64   `json:"max_discount"`
+	MinFare      float64   `json:"min_fare"`
+	ExpiresAt    time.Time `json:"expires_at"`
+	UsageLeft    int       `json:"usage_left"`
+}
+
+type DiscountResult struct {
+	OriginalFare   float64 `json:"original_fare"`
+	DiscountAmount float64 `json:"discount_amount"`
+	FinalFare      float64 `json:"final_fare"`
+	PromoCode      string  `json:"promo_code"`
+	Savings        float64 `json:"savings"`
+}
+
+type CommissionRate struct {
+	ServiceType string  `json:"service_type"`
+	Rate        float64 `json:"rate"`
+	Minimum     float64 `json:"minimum"`
+	Maximum     float64 `json:"maximum"`
+	City        string  `json:"city"`
+}
+
+type ServiceFee struct {
+	ServiceType string  `json:"service_type"`
+	Fee         float64 `json:"fee"`
+	FeeType     string  `json:"fee_type"` // fixed, percentage
+	City        string  `json:"city"`
+}
+
+type FareBreakdown struct {
+	RideID         primitive.ObjectID `json:"ride_id"`
+	BaseFare       float64            `json:"base_fare"`
+	DistanceFare   float64            `json:"distance_fare"`
+	TimeFare       float64            `json:"time_fare"`
+	WaitingFee     float64            `json:"waiting_fee"`
+	TollsFee       float64            `json:"tolls_fee"`
+	SurgeFare      float64            `json:"surge_fare"`
+	ServiceFee     float64            `json:"service_fee"`
+	DiscountAmount float64            `json:"discount_amount"`
+	TipAmount      float64            `json:"tip_amount"`
+	TotalFare      float64            `json:"total_fare"`
+	DriverEarnings float64            `json:"driver_earnings"`
+	Commission     float64            `json:"commission"`
+	PlatformFee    float64            `json:"platform_fee"`
+	Currency       string             `json:"currency"`
+}
+
 // Fare Negotiation Models
 type FareNegotiation struct {
 	ID          primitive.ObjectID `json:"id" bson:"_id,omitempty"`

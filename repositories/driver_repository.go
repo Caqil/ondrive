@@ -126,7 +126,7 @@ func (r *driverRepository) Create(driverInfo *models.DriverInfo) (*models.Driver
 
 	driver := &models.Driver{
 		ID:         primitive.NewObjectID(),
-		UserID:     UserID, // This needs to be passed somehow
+		UserID:     *driverInfo.CurrentRideID,
 		DriverInfo: driverInfo,
 		CreatedAt:  time.Now(),
 		UpdatedAt:  time.Now(),

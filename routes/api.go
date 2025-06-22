@@ -3,6 +3,7 @@ package routes
 import (
 	"ondrive/controllers"
 	"ondrive/middleware"
+	"ondrive/utils"
 	"ondrive/websocket"
 
 	"github.com/gin-gonic/gin"
@@ -13,7 +14,8 @@ func SetupRoutes(r *gin.Engine, controllers *controllers.Controllers, wsHub *web
 	r.Use(middleware.CORS())
 
 	// Logger middleware
-	r.Use(middleware.Logger(utils.NewLogger()))
+	logConfig := utils.LogConfig{} // TODO: set appropriate fields if needed
+	r.Use(middleware.Logger(utils.NewLogger(logConfig)))
 
 	// Rate limiting middleware
 	r.Use(middleware.RateLimit())
