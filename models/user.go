@@ -14,7 +14,6 @@ const (
 	RoleAdmin     UserRole = "admin"
 )
 
-
 type Gender string
 
 const (
@@ -229,7 +228,7 @@ type DeleteProfileRequest struct {
 	Reason   string `json:"reason"`
 }
 
-type UpdateLocationRequest struct {
+type UpdateUserLocationRequest struct {
 	Latitude   float64 `json:"latitude" binding:"required"`
 	Longitude  float64 `json:"longitude" binding:"required"`
 	Address    string  `json:"address"`

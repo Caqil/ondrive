@@ -200,7 +200,7 @@ func (s *userService) UploadDocument(userID, documentType string, file *multipar
 		ID:           primitive.NewObjectID(),
 		Type:         documentType,
 		URL:          documentURL,
-		Status:       models.StatusPending,
+		Status:       models.VerificationStatus,
 		UploadedAt:   time.Now(),
 	}
 
