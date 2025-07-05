@@ -1,4 +1,4 @@
-// lib/validations/auth.ts
+
 import { z } from 'zod';
 
 // Base validation schemas
@@ -27,10 +27,11 @@ const twoFactorCodeSchema = z.string()
   .length(6, '2FA code must be exactly 6 digits')
   .regex(/^\d{6}$/, '2FA code must contain only numbers');
 
-// Login Request - matches auth store login method
+// Login Request - FIXED: includes 2FA code as optional
 export const loginSchema = z.object({
   email: emailSchema,
   password: z.string().min(1, 'Password is required'),
+  code: twoFactorCodeSchema.optional(), // Added 2FA code field
   rememberMe: z.boolean().optional().default(false)
 });
 

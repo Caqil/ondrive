@@ -6,7 +6,16 @@ interface RateLimitStore {
     resetTime: number;
   };
 }
+interface RateLimitOptions {
+  interval: number; // Time window in milliseconds
+  uniqueTokenPerInterval: number; // Maximum unique tokens per interval
+}
 
+interface RateLimitResult {
+  remaining: number;
+  reset: number;
+  total: number;
+}
 // In-memory store (in production, use Redis or similar)
 const store: RateLimitStore = {};
 
@@ -96,7 +105,69 @@ export const shareRateLimiter = new RateLimiter(
   RATE_LIMITS.SHARE.WINDOW_MS,
   RATE_LIMITS.SHARE.MAX_REQUESTS
 );
+export default function rateLimit(options: RateLimitOptions) {
+  const tokenCache = new Map<string, number[]>();
 
+  return {
+    check: async (
+      res: any,
+      limit: number,
+      token: string
+    ): Promise<RateLimitResult> => {
+      const now = Date.now();
+      const windowStart = now - options.interval;
+
+      // Get existing timestamps for this token
+      const timestamps = tokenCache.get(token) || [];
+      
+      // Remove timestamps outside the window
+      const validTimestamps = timestamps.filter(time => time > windowStart);
+      
+      // Check if limit exceeded
+      if (validTimestamps.length >= limit) {
+        const oldestTimestamp = Math.min(...validTimestamps);
+        const resetTime = oldestTimestamp + options.interval;
+        
+        res.setHeader('X-RateLimit-Limit', limit.toString());
+        res.setHeader('X-RateLimit-Remaining', '0');
+        res.setHeader('X-RateLimit-Reset', Math.ceil(resetTime / 1000).toString());
+        
+        const error = new Error('Rate limit exceeded');
+        (error as any).statusCode = 429;
+        throw error;
+      }
+
+      // Add current timestamp
+      validTimestamps.push(now);
+      tokenCache.set(token, validTimestamps);
+
+      // Clean up old entries to prevent memory leaks
+      if (tokenCache.size > options.uniqueTokenPerInterval) {
+        const sortedEntries = Array.from(tokenCache.entries())
+          .sort(([, a], [, b]) => Math.max(...b) - Math.max(...a));
+        
+        // Keep only the most recent entries
+        tokenCache.clear();
+        for (const [key, value] of sortedEntries.slice(0, options.uniqueTokenPerInterval)) {
+          tokenCache.set(key, value);
+        }
+      }
+
+      const remaining = limit - validTimestamps.length;
+      const reset = Math.ceil((now + options.interval) / 1000);
+
+      res.setHeader('X-RateLimit-Limit', limit.toString());
+      res.setHeader('X-RateLimit-Remaining', remaining.toString());
+      res.setHeader('X-RateLimit-Reset', reset.toString());
+
+      return {
+        remaining,
+        reset,
+        total: limit
+      };
+    }
+  };
+}
 /**
  * Rate limit middleware helper
  */
