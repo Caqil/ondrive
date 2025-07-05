@@ -1,7 +1,6 @@
-// lib/hooks/use-usage-tracking.ts
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from './use-auth';
-import type { ObjectId, BaseResponse, UsageRecord } from '@/types';
+import type { ObjectId, BaseResponse } from '@/types';
 
 interface UsageStats {
   current: {
@@ -25,6 +24,21 @@ interface UsageStats {
   };
 }
 
+interface UsageRecord {
+  id: ObjectId;
+  userId: ObjectId;
+  type: 'upload' | 'download' | 'api_request' | 'share_created';
+  amount: number;
+  timestamp: Date;
+  metadata?: Record<string, any>;
+}
+
+interface UsageTrackingEvent {
+  type: 'upload' | 'download' | 'api_request' | 'share_created';
+  amount?: number;
+  metadata?: Record<string, any>;
+}
+
 interface UsageState {
   stats: UsageStats | null;
   history: UsageRecord[];
@@ -33,6 +47,7 @@ interface UsageState {
   lastUpdated: Date | null;
 }
 
+// Following your pattern - standalone hook for usage tracking
 export const useUsageTracking = () => {
   const { user } = useAuth();
   const [state, setState] = useState<UsageState>({
@@ -43,7 +58,6 @@ export const useUsageTracking = () => {
     lastUpdated: null,
   });
 
-  // Load current usage stats
   const loadStats = useCallback(async () => {
     if (!user) return;
 
@@ -59,7 +73,7 @@ export const useUsageTracking = () => {
 
       setState(prev => ({
         ...prev,
-        stats: result.data,
+        stats: result.data ?? null,
         isLoading: false,
         lastUpdated: new Date(),
       }));
@@ -72,7 +86,6 @@ export const useUsageTracking = () => {
     }
   }, [user]);
 
-  // Load usage history
   const loadHistory = useCallback(async (period: 'daily' | 'monthly' | 'yearly' = 'monthly') => {
     if (!user) return;
 
@@ -88,7 +101,7 @@ export const useUsageTracking = () => {
 
       setState(prev => ({
         ...prev,
-        history: result.data,
+        history: result.data ?? [],
         isLoading: false,
       }));
     } catch (error) {
@@ -100,86 +113,62 @@ export const useUsageTracking = () => {
     }
   }, [user]);
 
-  // Track specific usage event
-  const trackUsage = useCallback(async (event: {
-    type: 'upload' | 'download' | 'api_request' | 'share_created';
-    metadata?: Record<string, any>;
-  }) => {
+  const trackUsage = useCallback(async (event: UsageTrackingEvent) => {
     if (!user) return;
 
     try {
-      await fetch('/api/client/usage/track', {
+      const response = await fetch('/api/client/usage/track', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(event),
       });
 
-      // Optionally refresh stats after tracking
-      // loadStats();
+      const result: BaseResponse<UsageRecord> = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to track usage');
+      }
+
+      await loadStats();
     } catch (error) {
-      console.warn('Failed to track usage:', error);
-      // Don't throw here as tracking is non-critical
+      console.error('Failed to track usage:', error);
     }
-  }, [user]);
+  }, [user, loadStats]);
 
-  // Check if usage limit is exceeded for a specific metric
-  const isLimitExceeded = useCallback((metric: keyof UsageStats['current']) => {
-    if (!state.stats) return false;
-    
-    const currentValue = state.stats.current[metric];
-    const limitKey = `${metric.replace('Used', 'Limit')}` as keyof UsageStats['limits'];
-    const limitValue = state.stats.limits[limitKey as any];
-    
-    return currentValue >= limitValue;
-  }, [state.stats]);
-
-  // Get usage percentage for a specific metric
-  const getUsagePercentage = useCallback((metric: keyof UsageStats['current']) => {
+  const getUsagePercentage = useCallback((type: keyof UsageStats['current']) => {
     if (!state.stats) return 0;
     
-    const currentValue = state.stats.current[metric];
-    const limitKey = `${metric.replace('Used', 'Limit')}` as keyof UsageStats['limits'];
-    const limitValue = state.stats.limits[limitKey as any];
+    const current = state.stats.current[type];
+    const limit = state.stats.limits[`${type.replace('Used', 'Limit')}` as keyof UsageStats['limits']];
     
-    if (limitValue === 0) return 0;
-    return Math.min(100, (currentValue / limitValue) * 100);
+    return limit > 0 ? Math.min(100, (current / limit) * 100) : 0;
   }, [state.stats]);
 
-  // Format bytes helper
-  const formatBytes = useCallback((bytes: number) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  }, []);
-
-  // Clear error
   const clearError = useCallback(() => {
     setState(prev => ({ ...prev, error: null }));
   }, []);
 
-  // Auto-load stats when user is available
+  // Computed values
+  const hasExceededLimits = state.stats ? Object.keys(state.stats.current).some(key => {
+    const currentKey = key as keyof UsageStats['current'];
+    const limitKey = key.replace('Used', 'Limit') as keyof UsageStats['limits'];
+    return state.stats!.current[currentKey] >= state.stats!.limits[limitKey];
+  }) : false;
+
   useEffect(() => {
     if (user) {
       loadStats();
     }
   }, [user, loadStats]);
 
-  // Auto-refresh stats every 5 minutes
-  useEffect(() => {
-    if (!user) return;
-
-    const interval = setInterval(() => {
-      loadStats();
-    }, 5 * 60 * 1000); // 5 minutes
-
-    return () => clearInterval(interval);
-  }, [user, loadStats]);
-
   return {
     // State
-    ...state,
+    stats: state.stats,
+    history: state.history,
+    isLoading: state.isLoading,
+    error: state.error,
+    lastUpdated: state.lastUpdated,
+    hasExceededLimits,
 
     // Actions
     loadStats,
@@ -188,8 +177,6 @@ export const useUsageTracking = () => {
     clearError,
 
     // Helpers
-    isLimitExceeded,
     getUsagePercentage,
-    formatBytes,
   };
 };

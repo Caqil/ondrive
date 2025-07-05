@@ -1,31 +1,43 @@
-// lib/hooks/use-billing.ts
 import { useBillingStore } from '@/store/billing-store';
 
-/**
- * Simple hook that re-exports billing store functionality
- * Maintains consistency with existing store patterns
- */
+// Selectors - following your pattern
+export const useBillingInvoices = () => useBillingStore((state) => state.invoices);
+export const useBillingPayments = () => useBillingStore((state) => state.payments);
+export const useBillingCoupons = () => useBillingStore((state) => state.coupons);
+export const useBillingLoading = () => useBillingStore((state) => state.isLoading);
+export const useBillingError = () => useBillingStore((state) => state.error);
+
+// Actions - following your pattern
+export const useBillingActions = () => {
+  const store = useBillingStore();
+  return {
+    loadInvoices: store.loadInvoices,
+    loadInvoice: store.loadInvoice,
+    createInvoice: store.createInvoice,
+    downloadInvoice: store.downloadInvoice,
+    loadPayments: store.loadPayments,
+    createPayment: store.createPayment,
+    loadCoupons: store.loadCoupons,
+    applyCoupon: store.applyCoupon,
+    clearError: store.clearError,
+  };
+};
+
+// Main convenience hook
 export const useBilling = () => {
   const store = useBillingStore();
+  const actions = useBillingActions();
 
   return {
     // State
     invoices: store.invoices,
+    currentInvoice: store.currentInvoice,
     payments: store.payments,
-    paymentMethods: store.paymentMethods,
+    coupons: store.coupons,
     isLoading: store.isLoading,
     error: store.error,
-    pagination: store.pagination,
 
     // Actions
-    loadInvoices: store.loadInvoices,
-    loadPayments: store.loadPayments,
-    loadPaymentMethods: store.loadPaymentMethods,
-    createInvoice: store.createInvoice,
-    sendInvoice: store.sendInvoice,
-    processPayment: store.processPayment,
-    addPaymentMethod: store.addPaymentMethod,
-    removePaymentMethod: store.removePaymentMethod,
-    clearError: store.clearError,
+    ...actions,
   };
 };
