@@ -16,6 +16,9 @@ import crypto from 'crypto';
 // In-memory upload session storage (use Redis in production)
 const uploadSessions = new Map<string, any>();
 
+// Make sessions globally accessible for other routes
+(globalThis as any).uploadSessions = uploadSessions;
+
 // POST /api/upload - Initialize upload session
 export async function POST(request: NextRequest) {
   try {
