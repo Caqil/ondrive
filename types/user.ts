@@ -26,7 +26,7 @@ export interface User extends BaseDocument {
   password?: string;
   name: string;
   avatar?: string;
-  role: 'viewer' | 'user' | 'moderator' | 'admin';
+  role: 'user' | 'moderator' | 'viewer' | 'admin';
   emailVerified: boolean;
   emailVerificationToken?: string;
   passwordResetToken?: string;

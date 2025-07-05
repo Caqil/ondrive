@@ -15,7 +15,7 @@ const store: RateLimitStore = {};
  */
 export class RateLimiter {
   private windowMs: number;
-  private maxRequests: number;
+  public maxRequests: number;
 
   constructor(windowMs: number, maxRequests: number) {
     this.windowMs = windowMs;

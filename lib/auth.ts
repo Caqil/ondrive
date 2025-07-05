@@ -8,6 +8,8 @@ import bcrypt from 'bcryptjs';
 import { User } from '@/models';
 import { connectDB } from '@/lib/db';
 import type { User as UserType } from '@/types';
+
+// Ensure UserType includes 'admin' in the role type
 import { generateSecretKey, verifyTOTP } from '@/lib/crypto';
 import { MongoClient } from 'mongodb';
 
@@ -112,7 +114,7 @@ export function hasPermission(
   if (user.isBanned) return false;
 
   // Check email verification for sensitive actions
-  const sensitiveActions = ['upload', 'share', 'delete', 'admin'];
+  const sensitiveActions = ['upload', 'share', 'delete', 'admin-action'];
   if (sensitiveActions.includes(action) && !user.emailVerified) {
     return false;
   }
@@ -145,8 +147,6 @@ export function hasPermission(
       return ['admin', 'moderator'].includes(user.role);
     case 'share':
       return user.role !== 'viewer';
-    case 'admin':
-      return user.role === 'admin';
     default:
       return false;
   }
