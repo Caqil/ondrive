@@ -1,4 +1,6 @@
+// lib/validations/payment.ts
 import { z } from 'zod';
+import { objectIdSchema, currencySchema, addressSchema, emailSchema, nameSchema, metadataSchema } from './base';
 
 // Payment Method - matches models/Payment.ts exactly
 const paymentMethodSchema = z.object({
@@ -31,8 +33,8 @@ const billingAddressSchema = z.object({
 
 // Customer Info - matches models/Payment.ts
 const customerInfoSchema = z.object({
-  email: z.string().email('Invalid email address'),
-  name: z.string().min(1, 'Name is required'),
+  email: emailSchema,
+  name: nameSchema,
   phone: z.string().optional(),
   ipAddress: z.string().ip('Invalid IP address').optional(),
   userAgent: z.string().optional()
@@ -41,50 +43,13 @@ const customerInfoSchema = z.object({
 // Applied Coupon - matches models/Payment.ts
 const appliedCouponSchema = z.object({
   couponId: objectIdSchema,
-  code: z.string().min(1).toUpperCase(),
+  code: z.string().min(1, 'Coupon code is required').max(50).toUpperCase(),
   discountAmount: z.number().min(0),
   discountType: z.enum(['percentage', 'fixed_amount'])
 });
 
-// Refund Request - matches models/Payment.ts refunds structure
-export const refundPaymentSchema = z.object({
-  paymentId: objectIdSchema,
-  amount: z.number().min(1, 'Refund amount must be greater than 0').optional(), // If not provided, full refund
-  reason: z.string().min(5, 'Refund reason must be at least 5 characters').max(500, 'Reason cannot exceed 500 characters'),
-  refundId: z.string().optional(), // External refund ID
-  notifyCustomer: z.boolean().default(true)
-});
-
-// Dispute Information - matches models/Payment.ts
-export const updateDisputeSchema = z.object({
-  paymentId: objectIdSchema,
-  disputeId: z.string().min(1, 'Dispute ID is required'),
-  reason: z.string().min(1, 'Dispute reason is required'),
-  status: z.enum(['warning_needs_response', 'warning_under_review', 'warning_closed', 'needs_response', 'under_review', 'charge_refunded', 'won', 'lost']),
-  amount: z.number().min(0),
-  evidence: z.record(z.any()).optional(),
-  dueBy: z.string().datetime().optional()
-});
-
-// Risk Assessment - matches models/Payment.ts
-export const updateRiskAssessmentSchema = z.object({
-  paymentId: objectIdSchema,
-  riskScore: z.number().min(0).max(100),
-  riskLevel: z.enum(['low', 'medium', 'high']),
-  fraudCheck: z.object({
-    passed: z.boolean(),
-    score: z.number().min(0).max(100),
-    checks: z.object({
-      cvv: z.boolean(),
-      address: z.boolean(),
-      zip: z.boolean()
-    })
-  }).optional()
-});
-
-// Webhook Event - matches models/Payment.ts
-export const recordWebhookEventSchema = z.object({
-  paymentId: objectIdSchema,
+// Payment Event - matches models/Payment.ts
+export const paymentEventSchema = z.object({
   eventType: z.string().min(1, 'Event type is required'),
   eventId: z.string().min(1, 'Event ID is required'),
   processed: z.boolean().default(false)
@@ -119,40 +84,90 @@ export const createPaymentSchema = z.object({
   billingAddress: billingAddressSchema,
   customerInfo: customerInfoSchema,
   appliedCoupons: z.array(appliedCouponSchema).optional(),
-  metadata: z.record(z.any()).optional()
+  metadata: metadataSchema
 });
 
 // Payment Filters - comprehensive
 export const paymentFiltersSchema = z.object({
-  status: z.enum(['pending', 'processing', 'succeeded', 'failed', 'cancelled', 'refunded', 'partially_refunded', 'disputed']).optional(),
+  status: z.enum(['pending', 'processing', 'succeeded', 'failed', 'cancelled', 'refunded']).optional(),
   type: z.enum(['subscription', 'one_time', 'refund', 'adjustment', 'credit']).optional(),
   provider: z.enum(['stripe', 'paypal', 'paddle', 'lemonsqueezy', 'razorpay', 'manual']).optional(),
-  currency: currencySchema.optional(),
   userId: objectIdSchema.optional(),
   teamId: objectIdSchema.optional(),
   subscriptionId: objectIdSchema.optional(),
-  reconciled: z.boolean().optional(),
-  dateRange: z.object({
-    start: z.string().datetime().optional(),
-    end: z.string().datetime().optional()
-  }).optional(),
+  invoiceId: objectIdSchema.optional(),
+  currency: currencySchema.optional(),
+  paymentMethod: z.enum(['card', 'bank_transfer', 'paypal', 'crypto', 'wallet', 'other']).optional(),
   amountRange: z.object({
     min: z.number().min(0).optional(),
     max: z.number().min(0).optional()
   }).optional(),
-  riskLevel: z.enum(['low', 'medium', 'high']).optional(),
-  hasDispute: z.boolean().optional(),
-  hasRefund: z.boolean().optional(),
+  dateRange: z.object({
+    start: z.string().datetime().optional(),
+    end: z.string().datetime().optional()
+  }).optional(),
+  reconciled: z.boolean().optional(),
+  query: z.string().max(200, 'Search query cannot exceed 200 characters').optional(),
   page: z.number().min(1).default(1),
   limit: z.number().min(1).max(100).default(20),
-  sort: z.enum(['paymentNumber', 'amount', 'processedAt', 'status', 'createdAt']).default('processedAt'),
+  sort: z.enum(['paymentNumber', 'amount', 'createdAt', 'processedAt', 'status']).default('createdAt'),
   order: z.enum(['asc', 'desc']).default('desc')
 });
 
+// Update Payment - for manual adjustments
+export const updatePaymentSchema = z.object({
+  status: z.enum(['pending', 'processing', 'succeeded', 'failed', 'cancelled', 'refunded']).optional(),
+  description: z.string().min(1, 'Description is required').max(500).optional(),
+  metadata: metadataSchema,
+  notes: z.string().max(1000, 'Notes cannot exceed 1000 characters').optional()
+});
+
+// Refund Payment - for processing refunds
+export const refundPaymentSchema = z.object({
+  amount: z.number().min(1, 'Refund amount must be greater than 0').optional(), // If not provided, full refund
+  reason: z.enum(['requested_by_customer', 'duplicate', 'fraudulent', 'subscription_canceled', 'other']),
+  description: z.string().max(500, 'Refund description cannot exceed 500 characters').optional(),
+  refundToOriginalMethod: z.boolean().default(true),
+  notifyCustomer: z.boolean().default(true)
+});
+
+// Manual Payment - for recording manual payments
+export const manualPaymentSchema = z.object({
+  userId: objectIdSchema,
+  invoiceId: objectIdSchema.optional(),
+  subscriptionId: objectIdSchema.optional(),
+  amount: z.number().min(1, 'Payment amount must be greater than 0'),
+  currency: currencySchema,
+  paymentMethod: z.enum(['cash', 'check', 'bank_transfer', 'other']),
+  reference: z.string().max(100, 'Payment reference cannot exceed 100 characters').optional(),
+  description: z.string().min(1, 'Description is required').max(500),
+  paymentDate: z.string().datetime().default(new Date().toISOString()),
+  notes: z.string().max(1000, 'Notes cannot exceed 1000 characters').optional()
+});
+
+// Payment Verification - for verifying external payments
+export const verifyPaymentSchema = z.object({
+  providerId: z.string().min(1, 'Provider payment ID is required'),
+  provider: z.enum(['stripe', 'paypal', 'paddle', 'lemonsqueezy', 'razorpay']),
+  webhookSignature: z.string().optional(),
+  rawWebhookData: z.string().optional()
+});
+
+// Export payment method and other schemas for reuse
+export {
+  paymentMethodSchema,
+  taxDetailsSchema,
+  billingAddressSchema,
+  customerInfoSchema,
+  appliedCouponSchema
+};
+
+// Type exports
 export type CreatePaymentRequest = z.infer<typeof createPaymentSchema>;
-export type RefundPaymentRequest = z.infer<typeof refundPaymentSchema>;
-export type UpdateDisputeRequest = z.infer<typeof updateDisputeSchema>;
-export type UpdateRiskAssessmentRequest = z.infer<typeof updateRiskAssessmentSchema>;
-export type RecordWebhookEventRequest = z.infer<typeof recordWebhookEventSchema>;
-export type ReconcilePaymentRequest = z.infer<typeof reconcilePaymentSchema>;
 export type PaymentFiltersRequest = z.infer<typeof paymentFiltersSchema>;
+export type UpdatePaymentRequest = z.infer<typeof updatePaymentSchema>;
+export type RefundPaymentRequest = z.infer<typeof refundPaymentSchema>;
+export type ManualPaymentRequest = z.infer<typeof manualPaymentSchema>;
+export type VerifyPaymentRequest = z.infer<typeof verifyPaymentSchema>;
+export type PaymentEventRequest = z.infer<typeof paymentEventSchema>;
+export type ReconcilePaymentRequest = z.infer<typeof reconcilePaymentSchema>;

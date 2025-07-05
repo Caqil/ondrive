@@ -78,6 +78,14 @@ interface UploadState {
   startQueue: () => void;
   pauseQueue: () => void;
   resumeQueue: () => void;
+  processQueue: () => void;
+  
+  // Upload Methods - MISSING METHODS ADDED HERE
+  performUpload: (id: string, uploadResponse: FileUploadResponse) => Promise<void>;
+  performChunkedUpload: (id: string, uploadResponse: FileUploadResponse) => Promise<void>;
+  performDirectUpload: (id: string, uploadResponse: FileUploadResponse) => Promise<void>;
+  uploadChunk: (id: string, chunk: Blob, chunkIndex: number, uploadId: string) => Promise<void>;
+  completeChunkedUpload: (id: string, uploadId: string) => Promise<void>;
   
   // Configuration
   loadConfig: () => Promise<void>;
@@ -161,73 +169,53 @@ export const useUploadStore = create<UploadState>()(
             state.totalFiles += newUploads.length;
           });
 
-          // Auto-start uploads if not paused
+          // Auto-start if not paused
           if (!get().isPaused) {
-            get().startQueue();
+            get().processQueue();
           }
         },
 
-        // Remove Upload
+        // Remove Upload from Queue
         removeUpload: (id: string) => {
           set((state) => {
-            const uploadIndex = state.queue.findIndex(u => u.id === id);
-            if (uploadIndex !== -1) {
-              const upload = state.queue[uploadIndex];
-              
-              // Cancel if active
-              if (state.activeUploads.includes(id)) {
-                get().cancelUpload(id);
-              }
-              
-              state.queue.splice(uploadIndex, 1);
-              state.activeUploads = state.activeUploads.filter(uid => uid !== id);
-              state.completedUploads = state.completedUploads.filter(uid => uid !== id);
-              state.failedUploads = state.failedUploads.filter(uid => uid !== id);
-            }
+            state.queue = state.queue.filter(u => u.id !== id);
+            state.activeUploads = state.activeUploads.filter(uid => uid !== id);
+            state.completedUploads = state.completedUploads.filter(uid => uid !== id);
+            state.failedUploads = state.failedUploads.filter(uid => uid !== id);
           });
-
-          get().calculateTotalProgress();
         },
 
-        // Clear Completed
+        // Clear Completed Uploads
         clearCompleted: () => {
           set((state) => {
             state.queue = state.queue.filter(u => u.status !== 'completed');
             state.completedUploads = [];
           });
-          get().calculateTotalProgress();
         },
 
-        // Clear Failed
+        // Clear Failed Uploads
         clearFailed: () => {
           set((state) => {
             state.queue = state.queue.filter(u => u.status !== 'failed');
             state.failedUploads = [];
           });
-          get().calculateTotalProgress();
         },
 
-        // Clear All
+        // Clear All Uploads
         clearAll: () => {
-          // Cancel all active uploads first
-          const { activeUploads } = get();
-          activeUploads.forEach(id => get().cancelUpload(id));
-
           set((state) => {
             state.queue = [];
             state.activeUploads = [];
             state.completedUploads = [];
             state.failedUploads = [];
-            state.isUploading = false;
-            state.totalProgress = 0;
-            state.totalSpeed = 0;
             state.totalFiles = 0;
             state.successCount = 0;
             state.errorCount = 0;
+            state.isUploading = false;
           });
         },
 
-        // Start Individual Upload
+        // Start Single Upload
         startUpload: async (id: string) => {
           const upload = get().getUploadById(id);
           if (!upload || upload.status !== 'pending') return;
@@ -235,25 +223,15 @@ export const useUploadStore = create<UploadState>()(
           set((state) => {
             state.activeUploads.push(id);
             state.isUploading = true;
+            const uploadIndex = state.queue.findIndex(u => u.id === id);
+            if (uploadIndex !== -1) {
+              state.queue[uploadIndex].status = 'uploading';
+              state.queue[uploadIndex].startTime = Date.now();
+            }
           });
 
-          get().setUploadStatus(id, 'uploading');
-
           try {
-            const { config } = get();
-            if (!config) {
-              throw new Error('Upload configuration not loaded');
-            }
-
-            // Start time tracking
-            set((state) => {
-              const uploadIndex = state.queue.findIndex(u => u.id === id);
-              if (uploadIndex !== -1) {
-                state.queue[uploadIndex].startTime = Date.now();
-              }
-            });
-
-            // Request upload URL
+            // Create file upload request
             const uploadRequest: FileUploadRequest = {
               name: upload.name,
               size: upload.size,
@@ -261,6 +239,7 @@ export const useUploadStore = create<UploadState>()(
               folderId: upload.folderId,
             };
 
+            // Get upload URL from server
             const response = await fetch('/api/client/files/upload', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -519,41 +498,28 @@ export const useUploadStore = create<UploadState>()(
         // Cancel Upload
         cancelUpload: (id: string) => {
           const upload = get().getUploadById(id);
-          if (!upload) return;
+          if (upload) {
+            // Cancel XMLHttpRequest if exists
+            const xhr = (upload as any).xhr;
+            if (xhr) {
+              xhr.abort();
+            }
 
-          // Cancel XMLHttpRequest if exists
-          const xhr = (upload as any).xhr;
-          if (xhr) {
-            xhr.abort();
-          }
-
-          // Notify server to cancel upload
-          if (upload.uploadId) {
-            fetch('/api/client/files/upload/abort', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ uploadId: upload.uploadId }),
-            }).catch(() => {
-              // Ignore errors when cancelling
+            get().setUploadStatus(id, 'cancelled');
+            
+            set((state) => {
+              state.activeUploads = state.activeUploads.filter(uid => uid !== id);
+              if (state.activeUploads.length === 0) {
+                state.isUploading = false;
+              }
             });
           }
-
-          get().setUploadStatus(id, 'cancelled');
-          
-          set((state) => {
-            state.activeUploads = state.activeUploads.filter(uid => uid !== id);
-            if (state.activeUploads.length === 0) {
-              state.isUploading = false;
-            }
-          });
-
-          get().calculateTotalProgress();
         },
 
         // Retry Upload
         retryUpload: async (id: string) => {
           const upload = get().getUploadById(id);
-          if (upload && upload.status === 'failed') {
+          if (upload && (upload.status === 'failed' || upload.status === 'cancelled')) {
             get().setUploadStatus(id, 'pending');
             set((state) => {
               const uploadIndex = state.queue.findIndex(u => u.id === id);
@@ -562,9 +528,8 @@ export const useUploadStore = create<UploadState>()(
                 state.queue[uploadIndex].uploadedBytes = 0;
                 state.queue[uploadIndex].error = undefined;
               }
-              state.failedUploads = state.failedUploads.filter(uid => uid !== id);
             });
-
+            
             await get().startUpload(id);
           }
         },
@@ -661,40 +626,10 @@ export const useUploadStore = create<UploadState>()(
         },
 
         handleDrop: (files: FileList, folderId: ObjectId) => {
-          const { config } = get();
-          if (!config) return;
-
-          const validFiles: File[] = [];
-          const errors: string[] = [];
-
-          Array.from(files).forEach((file) => {
-            // Check file size
-            if (file.size > config.maxFileSize) {
-              errors.push(`${file.name}: File too large (max ${(config.maxFileSize / 1024 / 1024 / 1024).toFixed(1)}GB)`);
-              return;
-            }
-
-            // Check file type if restrictions exist
-            if (config.allowedMimeTypes.length > 0 && !config.allowedMimeTypes.includes(file.type)) {
-              errors.push(`${file.name}: File type not allowed`);
-              return;
-            }
-
-            validFiles.push(file);
-          });
-
-          if (errors.length > 0) {
-            console.warn('Upload errors:', errors);
-            // You might want to show these errors to the user
-          }
-
-          if (validFiles.length > 0) {
-            get().addFiles(validFiles, folderId);
-          }
-
-          set((state) => {
-            state.isDragOver = false;
-          });
+          const fileArray = Array.from(files);
+          get().addFiles(fileArray, folderId);
+          get().setDragOver(false);
+          get().setDropZoneActive(false);
         },
 
         // Utility Functions
@@ -708,26 +643,19 @@ export const useUploadStore = create<UploadState>()(
 
         calculateTotalProgress: () => {
           const { queue } = get();
-          
           if (queue.length === 0) {
             set((state) => {
               state.totalProgress = 0;
-              state.totalSpeed = 0;
             });
             return;
           }
 
           const totalBytes = queue.reduce((sum, upload) => sum + upload.size, 0);
           const uploadedBytes = queue.reduce((sum, upload) => sum + upload.uploadedBytes, 0);
-          const totalProgress = totalBytes > 0 ? (uploadedBytes / totalBytes) * 100 : 0;
-          
-          const activeUploads = queue.filter(u => get().activeUploads.includes(u.id));
-          const totalSpeed = activeUploads.reduce((sum, upload) => sum + upload.speed, 0);
+          const progress = totalBytes > 0 ? (uploadedBytes / totalBytes) * 100 : 0;
 
           set((state) => {
-            state.totalProgress = totalProgress;
-            state.totalSpeed = totalSpeed;
-            state.totalUploaded = uploadedBytes;
+            state.totalProgress = Math.min(100, Math.max(0, progress));
           });
         },
 
@@ -736,25 +664,27 @@ export const useUploadStore = create<UploadState>()(
             const uploadIndex = state.queue.findIndex(u => u.id === id);
             if (uploadIndex !== -1) {
               const upload = state.queue[uploadIndex];
-              const prevUploadedBytes = upload.uploadedBytes;
-              const currentTime = Date.now();
-              
               upload.progress = Math.min(100, Math.max(0, progress));
               upload.uploadedBytes = uploadedBytes;
 
-              // Calculate speed (bytes per second)
-              if (upload.startTime && currentTime > upload.startTime) {
-                const timeElapsed = (currentTime - upload.startTime) / 1000;
-                upload.speed = uploadedBytes / timeElapsed;
+              // Calculate speed and ETA
+              if (upload.startTime) {
+                const elapsed = (Date.now() - upload.startTime) / 1000; // seconds
+                upload.speed = elapsed > 0 ? uploadedBytes / elapsed : 0;
                 
-                // Calculate ETA
                 const remainingBytes = upload.size - uploadedBytes;
                 upload.eta = calculateETA(remainingBytes, upload.speed);
               }
             }
           });
 
-          get().calculateTotalProgress();
+          // Update total speed
+          const activeUploads = get().getUploadsByStatus('uploading');
+          const totalSpeed = activeUploads.reduce((sum, upload) => sum + upload.speed, 0);
+          
+          set((state) => {
+            state.totalSpeed = totalSpeed;
+          });
         },
 
         setUploadStatus: (id: string, status: UploadItem['status'], error?: string) => {
